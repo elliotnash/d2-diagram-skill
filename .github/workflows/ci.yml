@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  wrapper-tests:
+    name: Wrapper safety tests (stub engines, no d2 needed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shellcheck the scripts and tests
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck skills/d2-diagrams/scripts/*.sh tests/run-tests.sh
+
+      - name: Run the wrapper test suite
+        run: bash tests/run-tests.sh
+
+  render-examples-min:
+    name: Render examples on minimum supported d2 (0.7.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install d2 at the supported minimum
+        run: curl -fsSL https://d2lang.com/install.sh | sh -s -- --version v0.7.0
+
+      - name: Render every example through the skill's own render script
+        run: |
+          set -e
+          for f in examples/*.d2; do
+            bash skills/d2-diagrams/scripts/render.sh --quiet --theme 0 --dark-theme 200 "$f" "${f%.d2}.svg"
+          done
+
+      - name: Fail if any rendered SVG carries a TALA watermark
+        run: |
+          if grep -q 'UNLICENSED' examples/*.svg; then
+            echo "watermarked SVG in examples/" >&2
+            exit 1
+          fi
+
+  render-examples-latest:
+    name: Render examples on latest d2 (compatibility canary)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install latest d2
+        run: curl -fsSL https://d2lang.com/install.sh | sh -s --
+
+      - name: Check formatting of example sources
+        run: d2 fmt --check examples/*.d2
+
+      - name: Render every example through the skill's own render script
+        run: |
+          set -e
+          for f in examples/*.d2; do
+            bash skills/d2-diagrams/scripts/render.sh --quiet --theme 0 --dark-theme 200 "$f" "${f%.d2}.svg"
+          done
+
+      - name: Fail if any rendered SVG carries a TALA watermark
+        run: |
+          if grep -q 'UNLICENSED' examples/*.svg; then
+            echo "watermarked SVG in examples/" >&2
+            exit 1
+          fi
+
+      # Non-blocking: committed examples are rendered on macOS; cross-platform
+      # font metrics can produce benign diffs. Signal, not a gate.
+      - name: Example drift canary (committed SVGs vs fresh render)
+        continue-on-error: true
+        run: git diff --exit-code -- examples/
+
+  validate-plugin:
+    name: Validate plugin manifest (strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: claude plugin validate --strict
+        run: claude plugin validate . --strict

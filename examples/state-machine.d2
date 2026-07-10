@@ -1,0 +1,22 @@
+direction: right
+
+# larger type so the diagram stays legible scaled down in the README
+**.style.font-size: 24
+(** -> **)[*].style.font-size: 18
+
+classes: {
+  state: {shape: oval}
+  terminal: {shape: oval; style: {double-border: true}}
+}
+
+draft: Draft {class: state}
+review: In review {class: state}
+approved: Approved {class: state}
+published: Published {class: terminal}
+archived: Archived {class: terminal}
+
+draft -> review: submit
+review -> draft: request changes
+review -> approved: approve
+approved -> published: publish
+published -> archived: retire

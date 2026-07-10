@@ -1,0 +1,19 @@
+shape: sequence_diagram
+
+browser: Browser
+api: API
+pay: Payments
+db: Database
+
+browser -> api: POST /checkout
+api -> db: reserve stock
+db -> api: reservation id
+api -> pay: create intent
+pay -> api: client secret
+api -> browser: 200 (client secret)
+opt: {
+  "card declined": {
+    pay -> api: webhook payment_failed
+    api -> db: release stock
+  }
+}

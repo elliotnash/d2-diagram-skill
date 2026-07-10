@@ -1,0 +1,22 @@
+direction: down
+
+alert: Alert fires
+triage: On-call triages
+sev: Severity? {shape: diamond}
+page: Page incident commander
+fix: Apply fix or rollback
+monitor: Monitor 30 min
+resolved: Resolved? {shape: diamond}
+postmortem: Write post-mortem
+close: Close alert
+
+alert -> triage
+triage -> sev
+sev -> page: SEV-1/2
+sev -> fix: SEV-3+
+page -> fix
+fix -> monitor
+monitor -> resolved
+resolved -> postmortem: yes
+resolved -> fix: no, iterate
+postmortem -> close

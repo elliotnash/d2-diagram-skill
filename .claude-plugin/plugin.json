@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "d2-diagrams",
+  "displayName": "D2 Diagrams",
+  "version": "0.3.0",
+  "description": "Professional diagrams as code with D2: writes D2, renders SVG with the best available layout engine (TALA when licensed, ELK fallback), then views its own render and fixes layout defects in a loop before delivering.",
+  "author": {
+    "name": "Kevin Hollingworth",
+    "url": "https://github.com/khollingworth"
+  },
+  "homepage": "https://github.com/khollingworth/d2-diagram-skill",
+  "repository": "https://github.com/khollingworth/d2-diagram-skill",
+  "license": "MIT",
+  "keywords": [
+    "d2",
+    "diagrams",
+    "architecture",
+    "svg",
+    "tala",
+    "elk",
+    "diagram-as-code",
+    "visualization"
+  ]
+}

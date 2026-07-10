@@ -1,0 +1,6 @@
+# Rendered PNG previews are loop artefacts; SVGs are the tracked deliverables
+examples/*.png
+*.png
+
+# OS noise
+.DS_Store

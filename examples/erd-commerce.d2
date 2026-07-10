@@ -1,0 +1,34 @@
+direction: right
+
+users: users {
+  shape: sql_table
+  id: uuid {constraint: primary_key}
+  email: varchar {constraint: unique}
+  created_at: timestamptz
+}
+
+orders: orders {
+  shape: sql_table
+  id: uuid {constraint: primary_key}
+  user_id: uuid {constraint: foreign_key}
+  status: order_status
+  total_pence: bigint
+}
+
+order_items: order_items {
+  shape: sql_table
+  order_id: uuid {constraint: foreign_key}
+  product_id: uuid {constraint: foreign_key}
+  qty: int
+}
+
+products: products {
+  shape: sql_table
+  id: uuid {constraint: primary_key}
+  sku: varchar {constraint: unique}
+  price_pence: bigint
+}
+
+orders.user_id -> users.id: {target-arrowhead.shape: cf-one-required}
+order_items.order_id -> orders.id: {target-arrowhead.shape: cf-one-required}
+order_items.product_id -> products.id: {target-arrowhead.shape: cf-one-required}

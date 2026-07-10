@@ -1,0 +1,43 @@
+direction: right
+
+# larger type so the diagram stays legible scaled down in the README
+**.style.font-size: 24
+(** -> **)[*].style.font-size: 18
+
+classes: {
+  svc: {style: {border-radius: 8; shadow: true}}
+  ext: {style: {stroke-dash: 3; font-color: "#666666"}}
+}
+
+user: Customer {shape: person}
+
+edge: Edge {
+  cdn: CDN
+  waf: WAF
+}
+
+app: Application {
+  api: API Gateway {class: svc}
+  auth: Auth {class: svc}
+  orders: Orders {class: svc}
+}
+
+data: Data Layer {
+  pg: PostgreSQL {shape: cylinder}
+  cache: Redis {shape: cylinder}
+  bus: Kafka {shape: queue}
+}
+
+billing: Billing {class: svc}
+stripe: Stripe {class: ext}
+
+user -> edge.cdn: HTTPS
+edge.cdn -> edge.waf
+edge.waf -> app.api
+app.api -> app.auth: JWT
+app.api -> app.orders: REST
+app.orders -> data.pg: SQL
+app.orders -> data.cache: cache
+app.orders -> data.bus: publish
+data.bus -> billing: consume
+billing -> stripe: charge {style.animated: true}
