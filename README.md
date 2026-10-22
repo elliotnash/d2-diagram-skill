@@ -1,6 +1,6 @@
 # D2 Diagrams for Claude Code
 
-[![skills.sh](https://skills.sh/b/khollingworth/d2-diagram-skill)](https://skills.sh/khollingworth/d2-diagram-skill)
+[![skills.sh](https://skills.sh/b/elliotnash/d2-diagram-skill)](https://skills.sh/elliotnash/d2-diagram-skill)
 
 **Ask for a diagram, get a professional SVG — checked by the agent's own eyes before you see it.**
 
@@ -21,21 +21,21 @@ A Claude Code plugin that gives Claude a complete [D2](https://d2lang.com) diagr
 **As a plugin (recommended — versioned updates):**
 
 ```
-/plugin marketplace add khollingworth/d2-diagram-skill
+/plugin marketplace add elliotnash/d2-diagram-skill
 /plugin install d2-diagrams@d2-diagram-skill
 ```
 
 **As a bare skill (copy-paste):**
 
 ```bash
-git clone https://github.com/khollingworth/d2-diagram-skill.git
+git clone https://github.com/elliotnash/d2-diagram-skill.git
 cp -r d2-diagram-skill/skills/d2-diagrams ~/.claude/skills/
 ```
 
-**Via [skills.sh](https://skills.sh/khollingworth/d2-diagram-skill) (works across 17+ agents):**
+**Via [skills.sh](https://skills.sh/elliotnash/d2-diagram-skill) (works across 17+ agents):**
 
 ```bash
-npx skills add khollingworth/d2-diagram-skill
+npx skills add elliotnash/d2-diagram-skill
 ```
 
 **Requirements:** the [d2 CLI](https://d2lang.com/tour/install), **minimum 0.9.0** — the skill checks for it and guides the install (`brew install d2`, or `curl -fsSL https://d2lang.com/install.sh | sh -s --`). TALA, ELK and PNG export all ship inside d2 0.9.0, so nothing else is needed. On Windows the scripts run through Claude Code's Git Bash — no extra setup.
