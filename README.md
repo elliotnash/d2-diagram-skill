@@ -4,7 +4,7 @@
 
 **Ask for a diagram, get a professional SVG — checked by the agent's own eyes before you see it.**
 
-A Claude Code plugin that gives Claude a complete [D2](https://d2lang.com) diagramming capability: it writes diagram-as-code, renders SVG with the best layout engine available on your machine (**TALA** if you have a licence, **ELK** otherwise — automatically), then **views its own render and fixes layout defects in a loop** before delivering. No more edge spaghetti shipped sight-unseen.
+A Claude Code plugin that gives Claude a complete [D2](https://d2lang.com) diagramming capability: it writes diagram-as-code, renders SVG with **TALA** — the architecture-focused layout engine now open source and bundled in d2 0.9.0 — falling back to **ELK** automatically, then **views its own render and fixes layout defects in a loop** before delivering. No more edge spaghetti shipped sight-unseen.
 
 ![Example architecture diagram rendered by this plugin](examples/microservices.svg)
 
@@ -13,7 +13,7 @@ A Claude Code plugin that gives Claude a complete [D2](https://d2lang.com) diagr
 ## Why this exists
 
 - **Diagram-as-code that's actually reviewed.** LLMs are good at writing D2 and bad at knowing how it will look. This plugin closes the loop: render → view → fix → repeat (typically 2–4 iterations) using a defect checklist for edge tangles, label drift, unbalanced composition, and truncated text.
-- **TALA when you have it, ELK when you don't.** [TALA](https://terrastruct.com/tala) is Terrastruct's proprietary layout engine, purpose-built for architecture diagrams. The render script detects it, verifies your licence, and **never silently ships a watermarked SVG** — it falls back to bundled ELK instead.
+- **TALA by default, ELK as a safety net.** TALA is Terrastruct's layout engine purpose-built for architecture diagrams; since d2 0.9.0 it is open source and ships inside d2 — no plugin, no licence key, no watermark. If a TALA render ever fails, the script re-renders with bundled ELK and says so.
 - **SVG-first.** Crisp at every zoom, dark-mode capable (a single SVG responds to `prefers-color-scheme` when rendered with `--dark-theme`, as every diagram on this page was), embeddable in READMEs and docs sites.
 
 ## Install
@@ -38,7 +38,7 @@ cp -r d2-diagram-skill/skills/d2-diagrams ~/.claude/skills/
 npx skills add khollingworth/d2-diagram-skill
 ```
 
-**Requirements:** the [d2 CLI](https://d2lang.com/tour/install), minimum 0.7.0 — the skill checks for it and guides the install (`brew install d2`, or `curl -fsSL https://d2lang.com/install.sh | sh -s --`). ELK ships inside d2, so SVG rendering needs nothing else; the **PNG self-inspection step downloads a headless browser on first use** (offline, the skill falls back to SVG-only delivery). On Windows the scripts run through Claude Code's Git Bash — no extra setup.
+**Requirements:** the [d2 CLI](https://d2lang.com/tour/install), **minimum 0.9.0** — the skill checks for it and guides the install (`brew install d2`, or `curl -fsSL https://d2lang.com/install.sh | sh -s --`). TALA, ELK and PNG export all ship inside d2 0.9.0, so nothing else is needed. On Windows the scripts run through Claude Code's Git Bash — no extra setup.
 
 ## Use it
 
@@ -53,7 +53,7 @@ Claude plans the diagram, writes the `.d2` source, renders it, inspects the resu
 
 ## Examples
 
-Sources for every example are in [`examples/`](examples/) — click any diagram to open it full size.
+Sources for every example are in [`examples/`](examples/) — click any diagram to open it full size. The gallery SVGs were rendered with ELK (`--engine elk`); CI also renders every example with the default TALA engine.
 
 **Entity-relationship diagram** (`sql_table`)
 
@@ -71,22 +71,21 @@ Sources for every example are in [`examples/`](examples/) — click any diagram 
 
 <p align="center"><a href="examples/flowchart-incident.svg"><img src="examples/flowchart-incident.svg" width="440" alt="Incident flowchart"></a></p>
 
-## TALA and licensing — the honest version
+## Layout engines and licensing
 
 | Component | Licence | Cost |
 |---|---|---|
 | This plugin | MIT | Free |
-| D2 + ELK + dagre | MPL-2.0 (open source) | Free |
-| TALA layout engine | Proprietary (Terrastruct) | Free **evaluation with watermark**; paid licence for clean output ([pricing](https://terrastruct.com/tala)) |
+| D2 + TALA + ELK + dagre (d2 ≥ 0.9.0) | MPL-2.0 (open source) | Free |
 
-The plugin works fully without TALA — ELK produces good layouts and is what renders the gallery above. If TALA is installed (`brew install terrastruct/tap/tala`) **and** licensed (`TSTRUCT_TOKEN` env var or `~/.config/tstruct/auth.json`), it is used automatically for better architecture layouts. If TALA is installed but unlicensed, the render script detects the watermark and re-renders with ELK — you never get surprise `UNLICENSED COPY` stamps in deliverables (pass `--allow-watermark` to evaluate TALA deliberately). TALA is **not** bundled with this plugin and never will be; install it from Terrastruct under their terms. Note: running TALA in CI/servers requires a Terrastruct Enterprise licence — this repo's CI renders with ELK.
+As of d2 0.9.0, TALA is open source and bundled with d2, so this plugin uses it by default — locally and in CI, with no licence key and no watermark. Force another engine with `--engine elk|dagre`; ELK is often the better fit for long single-direction pipelines. Older d2 releases (which needed the separate, proprietary `d2plugin-tala`) are no longer supported.
 
 ## How the self-check loop works
 
-1. **Validate + render** via `scripts/render.sh` — engine auto-selection, watermark guard, `file:line:col` compile errors fed back to the model.
+1. **Validate + render** via `scripts/render.sh` — TALA by default with ELK fallback, d2 version floor, `file:line:col` compile errors fed back to the model.
 2. **View** — the agent Reads the PNG preview of its own render.
 3. **Audit** — two passes: does the diagram make its argument? then a defect checklist (label drift, edge tangles, crossing edges, cramped-vs-empty regions, truncated text).
-4. **Fix at the source level** — direction, containers, shorter labels, `near`, TALA seed re-rolls — never pixel-pushing.
+4. **Fix at the source level** — direction, containers, shorter labels, `near`, TALA seed re-rolls, switching engine — never pixel-pushing.
 5. **Repeat** until clean, then deliver SVG + source.
 
 ## Troubleshooting
@@ -94,17 +93,16 @@ The plugin works fully without TALA — ELK produces good layouts and is what re
 | Problem | Fix |
 |---|---|
 | `d2: command not found` | `brew install d2` or `curl -fsSL https://d2lang.com/install.sh \| sh -s --` |
-| Output has an `UNLICENSED COPY` watermark | You passed `--allow-watermark` (TALA evaluation), or rendered with raw `d2 --layout tala` outside the plugin's render script — set `TSTRUCT_TOKEN` for clean TALA output |
-| TALA installed but ELK used | No licence found — that's the designed fallback. Set `TSTRUCT_TOKEN` or the auth file |
-| PNG preview fails, SVG fine | First PNG render downloads a headless browser; retry once |
+| `d2 X is too old — this skill requires d2 >= 0.9.0` | Upgrade d2: `brew upgrade d2` or re-run the install script |
+| Report says `fallback: TALA render failed` | TALA errored on that source; the ELK render is fine to use. The report includes TALA's error |
 | Icons missing in output | Some icons.terrastruct.com URLs 403 — remove or swap the icon |
 
 ## Credits
 
-- [D2](https://github.com/terrastruct/d2) and [TALA](https://github.com/terrastruct/TALA) by Terrastruct.
+- [D2](https://github.com/terrastruct/d2) and its bundled TALA layout engine by Terrastruct.
 - D2 rendering conventions informed by [claude-d2-diagrams](https://github.com/heathdutton/claude-d2-diagrams) by Heath Dutton (MIT).
-- The render-and-self-check loop pattern — and the "a diagram should make an argument" planning discipline — were pioneered for Excalidraw by [Cole Medin](https://github.com/coleam00/excalidraw-diagram-skill); this plugin adapts both to D2, where native CLI rendering removes the browser/CDN dependency chain from diagram delivery (a headless browser is still downloaded once for the agent's raster self-checks).
+- The render-and-self-check loop pattern — and the "a diagram should make an argument" planning discipline — were pioneered for Excalidraw by [Cole Medin](https://github.com/coleam00/excalidraw-diagram-skill); this plugin adapts both to D2, where native CLI rendering removes the browser/CDN dependency chain from diagram delivery and self-checks alike.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). TALA is separately and proprietarily licensed by Terrastruct; this plugin only detects and invokes a TALA installation you provide.
+MIT — see [LICENSE](LICENSE). d2 and its bundled TALA engine are MPL-2.0, from Terrastruct.

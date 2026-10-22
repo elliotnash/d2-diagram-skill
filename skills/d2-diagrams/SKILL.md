@@ -4,19 +4,19 @@ description: >-
   Creates professional diagrams as code with D2 (d2lang.com) and renders them
   to SVG — architecture and system diagrams, flowcharts, sequence diagrams,
   database schemas/ERDs, network and cloud topologies, C4, state machines.
-  Renders with the best available layout engine (TALA when licensed, ELK
-  otherwise), then views its own rendered output and fixes layout defects in a
-  loop before delivering. Use whenever the user wants a diagram or asks to
+  Renders with the TALA layout engine bundled in d2 0.9.0+ (ELK as fallback),
+  then views its own rendered output and fixes layout defects in a loop before
+  delivering. Use whenever the user wants a diagram or asks to
   visualise, map, or sketch a system, workflow, architecture, pipeline,
   schema, or process — even if they don't say "diagram" — and whenever they
   mention D2, d2lang, TALA, or diagram-as-code. Does NOT cover data charts or
   graphs (bar/line/scatter — use a plotting library) or hand-drawn Excalidraw
   JSON files.
 license: MIT
-compatibility: Requires the d2 CLI, minimum 0.7.0 — tested with 0.7.x (guided install on first use). PNG self-checks download a headless browser on first use. Optional TALA layout engine, separately licensed by Terrastruct.
+compatibility: Requires the d2 CLI, minimum 0.9.0 (guided install on first use) — the first release that bundles the open-source TALA layout engine and renders PNG natively. Nothing else to install.
 metadata:
   author: khollingworth
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # D2 Diagrams
@@ -30,7 +30,7 @@ seen is a diagram you haven't finished.
 | File | Read it when |
 |---|---|
 | `references/d2-language.md` | Writing any non-trivial D2 — syntax, shapes, containers, classes, vars, and the silent pitfalls that compile fine but render wrong |
-| `references/layout-engines.md` | Choosing or debugging layout: TALA vs ELK vs dagre, licensing, seeds, per-engine behaviour differences |
+| `references/layout-engines.md` | Choosing or debugging layout: TALA vs ELK vs dagre, seeds, per-engine behaviour differences |
 | `references/diagram-patterns.md` | Picking a diagram type and structure — architecture, sequence, ERD, grid, C4; themes, icons, dark mode, GitHub embedding |
 
 ## Step 0 — Toolchain check
@@ -42,14 +42,13 @@ skill's own directory — in Claude Code `${CLAUDE_SKILL_DIR}` resolves to it):
 bash "${CLAUDE_SKILL_DIR}/scripts/setup.sh" --check-only
 ```
 
-- `d2: ok` → proceed.
+- `d2: ok` → proceed. `tala: ok (bundled)` follows automatically on 0.9.0+.
 - `d2: MISSING` → tell the user, then run `scripts/setup.sh` (no flags) to
   install via Homebrew where available, or show them the printed install
   commands. Don't render blind — nothing else in this skill works without d2.
-- `tala: not installed` or `unlicensed` → fine. ELK is the automatic fallback
-  and produces good layouts. Mention TALA once only if the diagram is a
-  software-architecture diagram (where TALA is meaningfully better) and the
-  user seems invested in output quality; never nag.
+- `d2: UNSUPPORTED` → the installed d2 predates 0.9.0 (no bundled TALA).
+  Ask the user to upgrade (`brew upgrade d2`, or rerun the install script);
+  `render.sh` refuses to run on older versions.
 
 ## Step 1 — Plan before writing
 
@@ -86,15 +85,16 @@ diagram. The rules that prevent 90% of broken output:
   with `class:`. Avoid `style.fill` on individual nodes; hard-coded fills
   fight the theme and break dark-mode rendering.
 - **Set `direction: right`** for most architecture flows (left-to-right reads
-  naturally). All engines honour the root-level direction; TALA additionally
-  supports per-container `direction`.
+  naturally). TALA (the default) treats it as a hint, not a rule —
+  check the render — and additionally supports per-container `direction`.
 - Save the source as `{name}.d2` next to where the output belongs
   (default: `./diagrams/` in the project).
 
 ## Step 3 — Render
 
-Always render through the bundled script — it picks the layout engine,
-guards against watermarked output, and validates first:
+Always render through the bundled script — it lays out with TALA (falling
+back to ELK if TALA fails), enforces the d2 version floor, and validates
+first:
 
 ```bash
 bash "${CLAUDE_SKILL_DIR}/scripts/render.sh" --png input.d2 output.svg
@@ -103,11 +103,11 @@ bash "${CLAUDE_SKILL_DIR}/scripts/render.sh" --png input.d2 output.svg
 - `--png` also writes `output.png` — you need it for Step 4 (the Read tool
   views raster images, not SVG). A failed preview fails the run so you can't
   skip Step 4 silently; pass `--preview-optional` only when a preview is
-  genuinely best-effort (e.g. offline — then inspect the SVG another way).
+  genuinely best-effort (then inspect the SVG another way).
 - The script prints `engine:` (what actually rendered), `fallback:` (why, if
   TALA wasn't used), and `remote:` (hosts the render fetched icons/images
   from). Relay a one-line note to the user only when they asked about
-  engines or explicitly wanted TALA.
+  engines or a fallback happened.
 - **Multi-board sources** (`layers`/`scenarios`/`steps`) render one SVG per
   board into a directory — the report says `svg: name/ (one SVG per board)`
   and previews land in `name-preview/`. Step 4 then applies to **every**
@@ -119,18 +119,15 @@ bash "${CLAUDE_SKILL_DIR}/scripts/render.sh" --png input.d2 output.svg
   the user the listed hosts and let them decide.
 - Useful flags: `--theme N`, `--dark-theme 200` (SVG responds to the reader's
   colour scheme), `--sketch`, `--pad N`, `--seed N` (TALA re-roll),
-  `--engine tala|elk|dagre` (force), `--allow-watermark` (TALA evaluation),
-  `--target PATH` (one board of a multi-board source), `--no-xml-tag` +
+  `--engine tala|elk|dagre` (force), `--target PATH` (one board of a multi-board source), `--no-xml-tag` +
   `--salt VALUE` (inline HTML embedding), `--elk-OPTION VALUE` (ELK spacing
   tuning, see `references/layout-engines.md`).
 - On failure the script prints d2's compile error with `file:line:col` —
   fix the source at that location and re-run. If the error is unclear, check
   the pitfalls section of `references/d2-language.md`.
 
-Never render TALA output for delivery with a watermark unless the user
-explicitly accepts it; the script enforces this by falling back to ELK when
-TALA was auto-selected, and by failing (not substituting) when you forced
-`--engine tala`.
+A forced `--engine` is never substituted: if it fails, the script fails.
+Only the default (auto) mode falls back from TALA to ELK.
 
 ## Step 4 — Look at it, then fix it (not optional)
 
@@ -160,9 +157,10 @@ audit it in two passes:
 inputs, not coordinates): change `direction`; group or regroup with
 containers; shorten edge labels (long labels drift worst on ELK); merge
 parallel edges into one labelled edge; move legends/titles out of flow with
-`near`; split an overloaded diagram into `layers`; adjust `--pad`; on TALA,
-re-roll with `--seed N` (try 2–3 seeds — layouts vary meaningfully); as a
-last resort switch engine for this diagram's shape (see
+`near`; split an overloaded diagram into `layers`; adjust `--pad`;
+re-roll TALA with `--seed N` (try 2–3 seeds — layouts vary meaningfully); as
+a last resort switch engine for this diagram's shape, e.g. `--engine elk` for
+a strictly one-directional pipeline TALA keeps folding (see
 `references/layout-engines.md`).
 
 Re-render, re-view, repeat. Budget two to four render cycles — a first
@@ -185,8 +183,7 @@ nothing in the image needs an apology or an explanation.
 | Symptom | Cause / fix |
 |---|---|
 | `d2: command not found` | Run `scripts/setup.sh` (guided install) |
-| `D2_LAYOUT "tala" is not bundled` | TALA not on PATH — script auto-falls back to ELK; install TALA only if the user wants it |
-| `UNLICENSED` text in output | TALA without a licence — the render script re-renders with ELK automatically; a licence key goes in `TSTRUCT_TOKEN` or `~/.config/tstruct/auth.json` |
-| PNG export fails, SVG fine | First PNG render downloads a headless browser; retry once. If blocked (offline/CI), re-run with `--preview-optional`, deliver the SVG, and inspect it by converting with any available SVG rasteriser |
-| Compile error under `--layout tala` that ELK renders fine | d2/TALA version skew — script falls back automatically; suggest updating both |
+| `d2 X is too old — this skill requires d2 >= 0.9.0` | Upgrade d2 (`brew upgrade d2` or the install script) — older releases don't bundle TALA |
+| `fallback: TALA render failed (...)` | TALA hit an error on this source; ELK rendered instead. Fine to deliver; if TALA matters, simplify the construct named in the error |
+| PNG export fails, SVG fine | Re-run with `--preview-optional`, deliver the SVG, and inspect it by converting with any available SVG rasteriser |
 | Icons missing from output | Icon URL returned 403/404 — remove the icon or pick another from icons.terrastruct.com; test icons early |

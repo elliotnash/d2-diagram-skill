@@ -6,8 +6,32 @@ PATCH for fixes. The `version` in `.claude-plugin/plugin.json` is bumped on
 every release — installed copies update only when it changes.
 
 Release checklist: bump `plugin.json` **and** `skills/d2-diagrams/SKILL.md`
-`metadata.version` together, add the entry below, run `tests/run-tests.sh`
-plus the release-time TALA smoke test documented in its header, tag.
+`metadata.version` together, add the entry below, run `tests/run-tests.sh`,
+tag.
+
+## [0.4.0] — 2026-10-21
+
+TALA by default: d2 0.9.0 bundles TALA as open source, so the skill now
+requires it and lays out with TALA unless told otherwise.
+
+### Changed
+- **Minimum d2 is now 0.9.0** (was 0.7.0). `render.sh` enforces it too
+  (exit 3 with upgrade instructions), not just `setup.sh`. Version parsing
+  now strips d2's leading `v` (previously `v0.x` compared as newer than any
+  number, so the floor could never trip on real d2 output).
+- `render.sh --engine auto` (the default) always uses the bundled TALA,
+  falling back to ELK only if the TALA render fails; the report includes
+  TALA's error.
+- PNG previews use d2's built-in renderer — no headless browser download.
+- CI renders every example with TALA; the non-blocking drift canary renders
+  with ELK to match the committed gallery.
+
+### Removed
+- All TALA licence handling: `TSTRUCT_TOKEN`/auth-file detection, the
+  post-render `UNLICENSED` watermark guard, and `--allow-watermark`.
+- `setup.sh --with-tala` (TALA ships inside d2); `setup.sh` now reports
+  `tala: ok (bundled)`.
+- Watermark test fixtures; the release-time unlicensed-TALA smoke test.
 
 ## [0.3.0] — 2026-07-10
 

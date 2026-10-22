@@ -1,57 +1,42 @@
 # Layout Engines: TALA, ELK, dagre
 
-`scripts/render.sh --engine auto` (the default) already implements the right
-policy: **TALA if installed and licensed, otherwise ELK**. This file explains
-the trade-offs so you can override deliberately.
+`scripts/render.sh --engine auto` (the default) lays out with **TALA**, and
+re-renders with ELK only if the TALA render fails. This file explains the
+trade-offs so you can override deliberately.
+
+Since d2 0.9.0 (the minimum this skill supports), TALA is open source and
+bundled inside d2 itself: no plugin, no licence key, no watermark, and it is
+fine to use in CI.
 
 ## The three engines
 
 | | dagre | ELK | TALA |
 |---|---|---|---|
-| Ships with d2 | yes (default) | yes | no — separate proprietary install |
+| Ships with d2 | yes (d2's CLI default) | yes | yes (0.9.0+), opt-in via `--layout tala` |
 | Style | hierarchical, fast | layered, orthogonal edges | whiteboard-like, built for software architecture |
 | `sql_table` FK edges | to the table | **to the exact row** | to the exact row |
-| `direction` | global only | global only | global **and per-container** |
+| `direction` | global only | global only | global (as a hint) **and per-container** |
 | `near: <shape-id>`, `top`/`left` pixel locking | no | no | **yes** |
-| Cost | free (MPL-2.0 d2) | free (bundled) | paid licence; free eval renders a watermark |
 
-**When ELK wins:** flowcharts, pipelines, anything with a strong single
-direction; CI (no licence needed); deterministic output.
+**When TALA wins (the default):** architecture diagrams with containers — it
+treats containers as first-class at every layout stage, routes orthogonally,
+places edge labels to avoid collisions, and balances connection ports. If the
+diagram looks like a whiteboard system sketch, TALA lays it out better.
 
-**When TALA wins:** architecture diagrams with containers — it treats
-containers as first-class at every layout stage, routes orthogonally, places
-edge labels to avoid collisions, and balances connection ports. If the
-diagram looks like a whiteboard system sketch, TALA will lay it out better.
+**When ELK wins:** flowcharts, pipelines, long single-direction chains. TALA
+treats root-level `direction` as a hint and will fold a long chain to balance
+the aspect ratio; if the reader must see one unbroken left-to-right (or
+top-to-bottom) flow and seed re-rolls don't deliver it, use `--engine elk`.
 
-**dagre** is the d2 default but the weakest for our purposes — only use it
+**dagre** is d2's CLI default but the weakest for our purposes — only use it
 when reproducing someone's existing dagre-based output.
-
-## TALA licensing — the facts
-
-- Free to **evaluate**; unlicensed renders succeed (exit 0) but embed an
-  `UNLICENSED COPY` watermark in the SVG — there is no reliable stderr signal,
-  which is why the post-render watermark scan exists.
-- Licence key: env var `TSTRUCT_TOKEN` (format `tstruct_...`), or
-  `~/.config/tstruct/auth.json` containing `{"api_token": "tstruct_..."}`
-  (path overridable via `TSTRUCT_AUTHFILE`). There is no licence-status
-  command — presence of token/auth-file is the only pre-render check, which
-  is why `render.sh` also greps the output for `UNLICENSED` afterwards.
-- Purchase at <https://terrastruct.com/tala>. **Server/CI use requires an
-  Enterprise licence** — never put `TSTRUCT_TOKEN` into CI to "fix" the
-  watermark; render with ELK in CI instead.
-- **Never bundle or redistribute** `d2plugin-tala` — Terrastruct's terms
-  prohibit it. Users install it themselves:
-  `brew install terrastruct/tap/tala` or
-  `curl -fsSL https://d2lang.com/install.sh | sh -s -- --tala`.
-- TALA phones home only to verify the token; diagrams never leave the machine.
 
 ## Detection (what render.sh does)
 
-- Installed? `command -v d2plugin-tala` (d2 discovers plugins by scanning
-  `$PATH` for `d2plugin-*`). `d2 layout tala` exits 0 with info when present,
-  1 with a clear error when not.
-- Licensed? Token/auth-file present, **plus** post-render `UNLICENSED` grep —
-  a token can be expired or malformed, and TALA still renders watermarked.
+- `d2 --version` must be ≥ 0.9.0, otherwise render.sh exits 3 (older
+  releases need a separately installed, licensed TALA plugin, which this
+  skill no longer handles). `setup.sh --check-only` reports the same.
+- `d2 layout tala` lists TALA as `tala (bundled)` and its options.
 
 ## TALA seeds — the re-roll lever
 
@@ -59,22 +44,25 @@ Layout search is seeded; different seeds converge on genuinely different
 layouts. By default TALA races seeds 1, 2, 3 and picks the best.
 
 ```bash
-render.sh --engine tala --seed 7 in.d2 out.svg     # single seed
-d2 --layout tala --tala-seeds 8,3,24 in.d2         # race several
+render.sh --seed 7 in.d2 out.svg                   # single seed
+render.sh --seed 8,3,24 in.d2 out.svg              # race several
 ```
 
-When a TALA layout is *almost* right, re-roll 2–3 seeds before restructuring
-the source — it's the cheapest fix in the loop.
+Seeds can also live in the source (`vars: {d2-config: {data: {tala-seeds:
+[8; 3; 24]}}}`) or the `D2_TALA_SEEDS` env var; in-diagram seeds take
+precedence over the flag. When a TALA layout is *almost* right, re-roll 2–3
+seeds before restructuring the source — it's the cheapest fix in the loop.
+`--seed` is ignored on ELK and dagre.
 
 ## Failure modes
 
-- `D2_LAYOUT "tala" is not bundled and could not be found in your $PATH`
-  (exit 1) → TALA not installed. render.sh auto-falls back in `--engine auto`.
-- Compile errors mentioning `failed to unmarshal json` under TALA → d2/TALA
-  version skew. render.sh falls back to ELK when TALA was auto-picked;
-  suggest the user update both (`brew upgrade d2 terrastruct/tap/tala`).
-- Watermark in output despite a token → token invalid/expired; the script
-  already re-rendered with ELK; tell the user their TALA token needs renewing.
+- `d2 X is too old — this skill requires d2 >= 0.9.0` (exit 3) → upgrade d2:
+  `brew upgrade d2`, or `curl -fsSL https://d2lang.com/install.sh | sh -s --`.
+- `fallback: TALA render failed (...)` → TALA errored on this source and
+  render.sh re-rendered with ELK. The SVG is fine to deliver; the first line
+  of TALA's error is in the report if you want to work around it.
+- A forced `--engine tala` that fails exits 1 — forced engines are never
+  substituted.
 
 ## ELK tuning (rarely needed)
 

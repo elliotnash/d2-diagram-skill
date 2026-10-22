@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "d2-diagram-skill",
-  "description": "D2 diagramming plugin for Claude Code — self-checking renders, TALA/ELK layout engines",
+  "description": "D2 diagramming plugin for Claude Code — self-checking renders, bundled TALA layout (d2 0.9.0+)",
   "owner": {
     "name": "Kevin Hollingworth"
   },
@@ -9,7 +9,7 @@
     {
       "name": "d2-diagrams",
       "source": "./",
-      "description": "Professional diagrams as code with D2: SVG output, TALA layout with ELK fallback, and a render-and-self-check loop that catches layout defects before delivery.",
+      "description": "Professional diagrams as code with D2: SVG output, bundled TALA layout (d2 0.9.0+) with ELK fallback, and a render-and-self-check loop that catches layout defects before delivery.",
       "category": "productivity",
       "tags": ["d2", "diagrams", "architecture", "svg"]
     }

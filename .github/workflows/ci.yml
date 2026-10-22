@@ -21,27 +21,23 @@ jobs:
         run: bash tests/run-tests.sh
 
   render-examples-min:
-    name: Render examples on minimum supported d2 (0.7.0)
+    name: Render examples on minimum supported d2 (0.9.0, bundled TALA)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install d2 at the supported minimum
-        run: curl -fsSL https://d2lang.com/install.sh | sh -s -- --version v0.7.0
+        run: curl -fsSL https://d2lang.com/install.sh | sh -s -- --version v0.9.0
 
-      - name: Render every example through the skill's own render script
+      - name: Render every example with the default engine (TALA), no fallback allowed
         run: |
           set -e
+          out=$(mktemp -d)
           for f in examples/*.d2; do
-            bash skills/d2-diagrams/scripts/render.sh --quiet --theme 0 --dark-theme 200 "$f" "${f%.d2}.svg"
+            report=$(bash skills/d2-diagrams/scripts/render.sh --theme 0 --dark-theme 200 "$f" "$out/$(basename "${f%.d2}").svg")
+            echo "$report"
+            echo "$report" | grep -q '^engine: tala'
           done
-
-      - name: Fail if any rendered SVG carries a TALA watermark
-        run: |
-          if grep -q 'UNLICENSED' examples/*.svg; then
-            echo "watermarked SVG in examples/" >&2
-            exit 1
-          fi
 
   render-examples-latest:
     name: Render examples on latest d2 (compatibility canary)
@@ -55,25 +51,25 @@ jobs:
       - name: Check formatting of example sources
         run: d2 fmt --check examples/*.d2
 
-      - name: Render every example through the skill's own render script
+      - name: Render every example with the default engine (TALA), no fallback allowed
         run: |
           set -e
+          out=$(mktemp -d)
           for f in examples/*.d2; do
-            bash skills/d2-diagrams/scripts/render.sh --quiet --theme 0 --dark-theme 200 "$f" "${f%.d2}.svg"
+            report=$(bash skills/d2-diagrams/scripts/render.sh --theme 0 --dark-theme 200 "$f" "$out/$(basename "${f%.d2}").svg")
+            echo "$report"
+            echo "$report" | grep -q '^engine: tala'
           done
 
-      - name: Fail if any rendered SVG carries a TALA watermark
-        run: |
-          if grep -q 'UNLICENSED' examples/*.svg; then
-            echo "watermarked SVG in examples/" >&2
-            exit 1
-          fi
-
-      # Non-blocking: committed examples are rendered on macOS; cross-platform
-      # font metrics can produce benign diffs. Signal, not a gate.
-      - name: Example drift canary (committed SVGs vs fresh render)
+      # Non-blocking: the committed gallery is rendered with ELK on macOS;
+      # cross-platform font metrics can produce benign diffs. Signal, not a gate.
+      - name: Example drift canary (committed SVGs vs fresh ELK render)
         continue-on-error: true
-        run: git diff --exit-code -- examples/
+        run: |
+          for f in examples/*.d2; do
+            bash skills/d2-diagrams/scripts/render.sh --quiet --engine elk --theme 0 --dark-theme 200 "$f" "${f%.d2}.svg"
+          done
+          git diff --exit-code -- examples/
 
   validate-plugin:
     name: Validate plugin manifest (strict)

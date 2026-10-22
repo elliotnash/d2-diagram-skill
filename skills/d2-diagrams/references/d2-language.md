@@ -1,4 +1,4 @@
-# D2 Language Reference (for writing correct D2, verified against d2 v0.7.1)
+# D2 Language Reference (for writing correct D2; first verified against d2 v0.7.1, skill requires v0.9.0+)
 
 Contents: [Basics](#basics) · [Connections](#connections) · [Containers](#containers) ·
 [Shapes](#shape-catalogue) · [Styling](#styling-classes-vars) · [Special diagram types](#special-diagram-types) ·
@@ -10,7 +10,7 @@ Contents: [Basics](#basics) · [Connections](#connections) · [Containers](#cont
 api                      # shape with key "api", label "api"
 api: API Gateway         # key "api", label "API Gateway"
 db.shape: cylinder       # set shape
-direction: right         # up | down | left | right (root level; per-container is TALA-only)
+direction: right         # up | down | left | right (root level; per-container needs TALA, the default)
 ```
 
 - Keys are **case-insensitive** (`Node` and `node` are the same object).
@@ -112,7 +112,7 @@ snippet: |go
 
 `near:` pins a shape out of the flow: one of `top-left top-center top-right
 center-left center-right bottom-left bottom-center bottom-right`
-(targeting another shape's ID is TALA-only). Use for titles and legends.
+(targeting another shape's ID needs TALA, the default). Use for titles and legends.
 
 ## Special diagram types
 
@@ -164,7 +164,7 @@ cell1; cell2; cell3; cell4; cell5; cell6
 base), `steps:` (progressive build). Render one board with the render
 script's `--target PATH`, animate with `--animate N` (SVG output only).
 Multi-board renders produce one SVG per board in a directory — the render
-script reports and watermark-scans all of them. Prefer layers over one giant
+script reports all of them. Prefer layers over one giant
 diagram.
 
 ## Silent pitfalls (compiles fine, renders wrong)

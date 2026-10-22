@@ -1,28 +1,24 @@
 #!/usr/bin/env bash
 # setup.sh — check (and where possible install) the d2 toolchain.
 #
-# Usage: setup.sh [--with-tala] [--check-only] [--allow-unsupported]
+# Usage: setup.sh [--check-only] [--allow-unsupported]
 #   --check-only         report status, install nothing
-#                        (exit 0 = ready, 1 = d2 missing/unsupported or a
-#                        requested TALA install failed)
-#   --with-tala          also install the TALA layout engine (Terrastruct's proprietary
-#                        engine; free to evaluate with a watermark, licence for clean output)
-#   --allow-unsupported  don't fail on a d2 older than the tested minimum
+#                        (exit 0 = ready, 1 = d2 missing/unsupported)
+#   --allow-unsupported  don't fail on a d2 older than the required minimum
 #
-# The skill is tested against d2 0.7.x; MIN_D2 below is the enforced floor.
+# The skill requires d2 >= 0.9.0 (MIN_D2 below), the first release that
+# bundles the open-source TALA layout engine — nothing else to install.
 # Non-interactive by design: never prompts. Prints clear status lines:
-#   d2: ok 0.7.1 | tala: ok (credentials found) | tala: ok (no credentials — ELK fallback active)
+#   d2: ok 0.9.0 | tala: ok (bundled)
 
 set -u
 
-MIN_D2="0.7.0"
+MIN_D2="0.9.0"
 
-WITH_TALA=0
 CHECK_ONLY=0
 ALLOW_UNSUPPORTED=0
 for arg in "$@"; do
   case "$arg" in
-    --with-tala) WITH_TALA=1 ;;
     --check-only) CHECK_ONLY=1 ;;
     --allow-unsupported) ALLOW_UNSUPPORTED=1 ;;
     -h|--help) awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"; exit 0 ;;
@@ -35,14 +31,15 @@ status=0
 # --- d2 ------------------------------------------------------------------------
 check_d2_version() {
   # Enforce the tested minimum: below MIN_D2 is an error unless --allow-unsupported.
-  ver=$(d2 --version 2>/dev/null)
+  # d2 prints e.g. "v0.9.0"; strip the v (and any -suffix) so sort -V compares numbers.
+  ver=$(d2 --version 2>/dev/null | sed -E 's/^v//; s/[^0-9.].*$//')
   printf 'd2: ok %s\n' "$ver"
   lowest=$(printf '%s\n%s\n' "$MIN_D2" "$ver" | sort -V | head -1)
-  if [ "$lowest" != "$MIN_D2" ] && [ "$ver" != "$MIN_D2" ]; then
+  if [ "$lowest" != "$MIN_D2" ]; then
     if [ "$ALLOW_UNSUPPORTED" -eq 1 ]; then
-      printf 'd2: WARNING — %s is below the tested minimum %s (continuing: --allow-unsupported)\n' "$ver" "$MIN_D2"
+      printf 'd2: WARNING — %s is below the required minimum %s (continuing: --allow-unsupported)\n' "$ver" "$MIN_D2"
     else
-      printf 'd2: UNSUPPORTED — %s is below the tested minimum %s. Upgrade d2, or rerun with --allow-unsupported to experiment anyway.\n' "$ver" "$MIN_D2"
+      printf 'd2: UNSUPPORTED — %s is below the required minimum %s (bundled TALA). Upgrade d2, or rerun with --allow-unsupported to experiment anyway.\n' "$ver" "$MIN_D2"
       status=1
     fi
   fi
@@ -72,39 +69,13 @@ else
   fi
 fi
 
-# --- TALA (optional) -------------------------------------------------------------
-tala_licence_status() {
-  # Presence of credentials only — validity is proven at first render (the
-  # render script's watermark guard catches expired/invalid tokens).
-  if [ -n "${TSTRUCT_TOKEN:-}" ] || { authfile="${TSTRUCT_AUTHFILE:-${XDG_CONFIG_HOME:-$HOME/.config}/tstruct/auth.json}"; [ -s "$authfile" ] && grep -q '"api_token"' "$authfile" 2>/dev/null; }; then
-    printf 'credentials found (unverified — validity is proven at first render)'
+# --- TALA (bundled with d2 >= 0.9.0) ---------------------------------------------
+if command -v d2 >/dev/null 2>&1; then
+  if d2 layout tala >/dev/null 2>&1; then
+    printf 'tala: ok (bundled)\n'
   else
-    printf 'no credentials — ELK fallback active; get a licence at https://terrastruct.com/tala'
+    printf 'tala: MISSING from this d2 build — render.sh will fall back to ELK\n'
   fi
-}
-
-if command -v d2plugin-tala >/dev/null 2>&1; then
-  printf 'tala: ok (%s)\n' "$(tala_licence_status)"
-elif [ "$WITH_TALA" -eq 1 ] && [ "$CHECK_ONLY" -eq 0 ]; then
-  if command -v brew >/dev/null 2>&1; then
-    printf 'tala: installing via Homebrew (Terrastruct proprietary licence applies)...\n'
-    if brew install terrastruct/tap/tala >/dev/null 2>&1 && command -v d2plugin-tala >/dev/null 2>&1; then
-      printf 'tala: ok (%s)\n' "$(tala_licence_status)"
-    else
-      printf 'tala: install FAILED. Install manually:\n'
-      printf '  curl -fsSL https://d2lang.com/install.sh | sh -s -- --tala\n'
-      status=1
-    fi
-  else
-    printf 'tala: cannot install automatically (no Homebrew). Install with:\n'
-    printf '  curl -fsSL https://d2lang.com/install.sh | sh -s -- --tala\n'
-    status=1
-  fi
-elif [ "$WITH_TALA" -eq 1 ]; then
-  printf 'tala: not installed (requested with --with-tala, but --check-only installs nothing)\n'
-  status=1
-else
-  printf 'tala: not installed (optional — ELK is used instead; rerun with --with-tala to add it)\n'
 fi
 
 exit "$status"

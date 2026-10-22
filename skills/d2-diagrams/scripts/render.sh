@@ -1,27 +1,21 @@
 #!/usr/bin/env bash
-# render.sh — render a .d2 file to SVG with the best available layout engine.
+# render.sh — render a .d2 file to SVG, laid out with TALA by default.
+#
+# Requires d2 >= 0.9.0, which bundles the open-source TALA engine (no plugin,
+# no licence key, no watermark).
 #
 # Engine selection (default --engine auto):
-#   1. TALA installed AND licensed        -> tala
-#   2. TALA installed, unlicensed         -> elk (TALA would watermark; --allow-watermark overrides)
-#   3. TALA not installed                 -> elk
-#   Force a specific engine with --engine tala|elk|dagre. A forced engine is
-#   never substituted: if it cannot render — or renders a watermark you did not
-#   accept with --allow-watermark — the script fails.
-#
-# Licence detection: TSTRUCT_TOKEN env var, or api_token in
-# ${TSTRUCT_AUTHFILE:-${XDG_CONFIG_HOME:-$HOME/.config}/tstruct/auth.json}.
-# Belt-and-braces: after a TALA render every produced SVG is scanned for TALA's
-# watermark element; if present (expired/invalid token), auto-selected TALA is
-# re-rendered with ELK, and a forced TALA fails.
+#   auto -> tala; if the TALA render fails, the diagram is re-rendered with ELK
+#   and the report says why. Force a specific engine with --engine
+#   tala|elk|dagre. A forced engine is never substituted: if it cannot render,
+#   the script fails.
 #
 # Multi-board sources (layers/scenarios/steps) render one SVG per board into a
-# directory named after the output; the report and watermark scan cover every
-# board, and PNG previews go to a separate {name}-preview/ directory.
+# directory named after the output; the report covers every board, and PNG
+# previews go to a separate {name}-preview/ directory.
 #
 # Usage: render.sh [options] input.d2 [output.svg]
-#   --engine auto|tala|elk|dagre   layout engine (default: auto)
-#   --allow-watermark              keep unlicensed TALA output (evaluation only)
+#   --engine auto|tala|elk|dagre   layout engine (default: auto = tala, ELK fallback)
 #   --png                          also write a PNG preview next to the SVG
 #   --preview-optional             with --png: a failed preview is non-fatal
 #   --theme N                      d2 theme ID (0 = Neutral Default)
@@ -41,13 +35,13 @@
 #
 # Output (stdout): "engine:", optional "fallback:", optional "remote:" (hosts the
 # render may fetch), "svg:", optional "png:" lines.
-# Exit codes: 0 ok; 1 validate/render/watermark/preview error; 2 usage error; 3 d2 not installed.
+# Exit codes: 0 ok; 1 validate/render/preview error; 2 usage error;
+#             3 d2 not installed or older than 0.9.0.
 
 set -u
 
 ENGINE="auto"
 AUTO_TALA=0
-ALLOW_WATERMARK=0
 WANT_PNG=0
 PREVIEW_OPTIONAL=0
 THEME=""
@@ -91,7 +85,6 @@ need_number() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --engine) need_value --engine $#; ENGINE="$2"; shift 2 ;;
-    --allow-watermark) ALLOW_WATERMARK=1; shift ;;
     --png) WANT_PNG=1; shift ;;
     --preview-optional) PREVIEW_OPTIONAL=1; shift ;;
     --theme) need_value --theme $#; need_number --theme "$2"; THEME="$2"; shift 2 ;;
@@ -146,26 +139,15 @@ command -v d2 >/dev/null 2>&1 || {
   exit 3
 }
 
-tala_installed() { command -v d2plugin-tala >/dev/null 2>&1; }
-
-tala_licensed() {
-  [ -n "${TSTRUCT_TOKEN:-}" ] && return 0
-  authfile="${TSTRUCT_AUTHFILE:-${XDG_CONFIG_HOME:-$HOME/.config}/tstruct/auth.json}"
-  [ -s "$authfile" ] && grep -q '"api_token"' "$authfile" 2>/dev/null
-}
-
-# TALA's watermark is a distinctively styled inline element; user labels render
-# with font/class attributes instead, so this does not match diagram content.
-WATERMARK_PATTERN='opacity:0.3">UNLICENSED COPY</text>'
-
-svg_watermarked() {
-  # $1 = an SVG file, or a directory of per-board SVGs (scanned recursively)
-  if [ -d "$1" ]; then
-    [ -n "$(find "$1" -name '*.svg' -exec grep -l "$WATERMARK_PATTERN" {} + 2>/dev/null | head -1)" ]
-  else
-    grep -q "$WATERMARK_PATTERN" "$1" 2>/dev/null
-  fi
-}
+# d2 0.9.0 is the first release that bundles TALA; older releases need a
+# separately installed, licensed plugin that this script no longer handles.
+MIN_D2="0.9.0"
+D2_VERSION=$(d2 --version 2>/dev/null | sed -E 's/^v//; s/[^0-9.].*$//')
+if [ "$(printf '%s\n%s\n' "$MIN_D2" "$D2_VERSION" | sort -V | head -1)" != "$MIN_D2" ]; then
+  err "d2 ${D2_VERSION:-(unknown version)} is too old — this skill requires d2 >= $MIN_D2 (bundled TALA)."
+  err "Upgrade: brew upgrade d2, or curl -fsSL https://d2lang.com/install.sh | sh -s --"
+  exit 3
+fi
 
 # --- remote asset scan -----------------------------------------------------------
 # Walks the source plus its local @import graph and lists remote http(s) hosts
@@ -206,29 +188,8 @@ fi
 # --- pick engine --------------------------------------------------------------
 FALLBACK_REASON=""
 case "$ENGINE" in
-  auto)
-    if tala_installed; then
-      if tala_licensed || [ "$ALLOW_WATERMARK" -eq 1 ]; then
-        ENGINE="tala"
-        AUTO_TALA=1
-      else
-        ENGINE="elk"
-        FALLBACK_REASON="TALA is installed but no licence found (TSTRUCT_TOKEN / auth.json) — using ELK to avoid a watermarked SVG. Pass --allow-watermark to evaluate TALA anyway."
-      fi
-    else
-      ENGINE="elk"
-      FALLBACK_REASON="TALA not installed — using ELK. For best architecture layouts: brew install terrastruct/tap/tala (or: curl -fsSL https://d2lang.com/install.sh | sh -s -- --tala)"
-    fi
-    ;;
-  tala)
-    tala_installed || {
-      err "TALA requested but d2plugin-tala is not on PATH."
-      err "Install: brew install terrastruct/tap/tala"
-      err "     or: curl -fsSL https://d2lang.com/install.sh | sh -s -- --tala"
-      exit 1
-    }
-    ;;
-  elk|dagre) : ;;
+  auto) ENGINE="tala"; AUTO_TALA=1 ;;
+  tala|elk|dagre) : ;;
   *) err "unknown engine: $ENGINE (use auto|tala|elk|dagre)"; exit 2 ;;
 esac
 
@@ -263,10 +224,10 @@ render() {
 }
 
 if ! render "$ENGINE" 1 "$OUTPUT"; then
-  # d2/TALA version skew can hard-fail compilation. Only degrade to ELK when
-  # TALA was chosen automatically — a user-forced engine must fail honestly.
+  # Only degrade to ELK when TALA was chosen automatically — a user-forced
+  # engine must fail honestly.
   if [ "$AUTO_TALA" -eq 1 ]; then
-    FALLBACK_REASON="TALA render failed (possible d2/TALA version mismatch — try updating both) — re-rendered with ELK."
+    FALLBACK_REASON="TALA render failed ($(printf '%s' "$RENDER_OUT" | head -1)) — re-rendered with ELK."
     ENGINE="elk"
     render elk 1 "$OUTPUT" || exit 1
   else
@@ -285,25 +246,6 @@ if [ ! -f "$OUTPUT" ]; then
     exit 1
   fi
 fi
-if [ "$MULTI" -eq 1 ]; then SCAN_PATH="$BOARD_DIR"; else SCAN_PATH="$OUTPUT"; fi
-
-# --- post-render watermark guard ------------------------------------------------
-USED_ENGINE="$ENGINE"
-if [ "$ENGINE" = "tala" ] && [ "$ALLOW_WATERMARK" -eq 0 ] && svg_watermarked "$SCAN_PATH"; then
-  if [ "$AUTO_TALA" -eq 1 ]; then
-    FALLBACK_REASON="TALA rendered with an UNLICENSED watermark (token missing, invalid, or expired) — re-rendered with ELK. Pass --allow-watermark to keep TALA evaluation output."
-    USED_ENGINE="elk"
-    render elk 1 "$OUTPUT" || exit 1
-  else
-    # A forced engine is never substituted (see header) — fail, and don't
-    # leave a watermarked deliverable behind.
-    rm -rf "$SCAN_PATH"
-    err "forced TALA rendered an UNLICENSED watermark and --allow-watermark was not given."
-    err "The watermarked output was removed. Set TSTRUCT_TOKEN (or the auth file) for clean"
-    err "TALA output, pass --allow-watermark to keep evaluation output, or use --engine auto."
-    exit 1
-  fi
-fi
 
 # --- optional PNG preview (raster, for visual self-checks) -----------------------
 PNG_PATH=""
@@ -316,7 +258,7 @@ if [ "$WANT_PNG" -eq 1 ]; then
     PNG_PATH="${OUTPUT%.svg}.png"
   fi
   PNG_FAILED=0
-  if ! render "$USED_ENGINE" 0 "$PNG_PATH"; then
+  if ! render "$ENGINE" 0 "$PNG_PATH"; then
     PNG_FAILED=1
   elif [ ! -f "$PNG_PATH" ]; then
     # multi-board inputs render one PNG per board into a directory
@@ -327,8 +269,7 @@ if [ "$WANT_PNG" -eq 1 ]; then
     fi
   fi
   if [ "$PNG_FAILED" -eq 1 ]; then
-    err "PNG preview failed (the SVG itself succeeded). The first PNG render"
-    err "downloads a headless browser — retry once, or inspect the SVG instead."
+    err "PNG preview failed (the SVG itself succeeded) — inspect the SVG instead."
     if [ "$PREVIEW_OPTIONAL" -eq 1 ]; then
       PNG_PATH=""
     else
@@ -338,7 +279,7 @@ if [ "$WANT_PNG" -eq 1 ]; then
   fi
 fi
 
-report "engine: $USED_ENGINE"
+report "engine: $ENGINE"
 [ -n "$FALLBACK_REASON" ] && report "fallback: $FALLBACK_REASON"
 [ -n "$REMOTE_HOSTS" ] && report "remote: $REMOTE_HOSTS"
 if [ "$MULTI" -eq 1 ]; then
